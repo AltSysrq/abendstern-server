@@ -1,0 +1,680 @@
+The Abendstern Server is a Tcl dæmon which runs stateful connections with
+clients, managing such things as authentication, information sharing, and
+Internet games, as well as providing a UDP hole-punching service.
+
+A connection to the local MySQL server is used for data persistence.
+
+Communications are performed over TCP 12544.
+
+The protocol has three overall modes:
++ Plain: Messages are exchanged in plain text. This mode is only used for
+  exchanging enough data to enter Secure mode.
++ Secure: Messages are encrypted with AES-128.
++ Data: A temporary mode in which a block of data is exchanged, unencrypted.
+
+Plain mode is used simply to perform a Diffie-Hellman key exchange
+(see: http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange) and
+then switch into Secure mode.
+
+Diffie-Hellman key exchange uses base 5 and the prime number
+1451730470513778492236629598992166035067 (40 digits).
+
+Messages take the form of Tcl lists, the first elt of which is the type of
+message.
+
+The server maintains a mapping of commands it is willing to accept from the
+client at any time, which simplifies programming by eliminating most
+possibilities of inconsistency. Initially, only the abendstern message is
+allowed.
+
+Messages:
+error locpath message
+  Always a valid option, sent by either party. Locpath is the symbolic name of
+  the localisation entry for the message; in case it is not found, message is
+  an English description of the error.
+  After this message, the stream is terminated.
+
+ping
+  Always a valid option, sent by the client. Allows the server to update the
+  last activity time if needed. This should be sent more than once every
+  minute to prevent the session from expiring.
+
+abendstern version longversion
+  When sent by the client:
+    Indicates this is an Abendstern client using the given protocol version
+    and specific Abendstern version.
+    If the version is compatible, the server will send an identical message.
+    Disables abendstern.
+  When sent by the server:
+    Acknowledges the client and server are running intercompatible versions of
+    Abendstern. The longversion is not included by the server, since it does
+    not run Abendstern itself.
+    Enables dhke-first.
+
+clock-sync seconds
+  Sent by the server. Indicates the time according to the server. This allows
+  the client to alter its own clock so that all clients have approximately the
+  same time.
+
+dhke-first A
+  Sent by the client. A is the result of base**a%prime, where a is the client's
+  secret number.
+  Disables dhke-first.
+
+dhke-second B
+  Sent by the server. B is the result of base**b%prime, where b is the server's
+  secret number. After this, the encryption key is B**a%prime for the client
+  and A**b%prime for the server, truncated to 128 bits.
+  Enables begin-secure.
+
+begin-secure
+  Sent by the client. Indicates it has finished computing the encryption key
+  and is ready to switch to Secure mode. After this message is sent, all
+  further communication will be in Secure mode.
+  Disables begin-secure.
+  Enables [pre], change-key.
+
+change-key K
+  Sent by client or server. Indicates that all further messages will use the
+  new 128-bit K (only applying to the stream from the sender). Each party
+  should change the key periodically.
+
+pre-account-create username password
+  Sent by the client. Requests to create a new account with the given username
+  and password. The client must wait for an action-status response.
+  On success, the connection automatically logs into the account.
+  Disables [pre] commands.
+  On success, enables [top]
+  On failure, enables [pre] messages
+
+pre-account-login username password
+  Sent by the client. Requests to log into the server with the given username/
+  password combination. The client must wait for an action-status response.
+  Disables [pre] commands.
+  On success, enables [top]
+  On failure, enables [pre]
+
+action-status status locmsg message
+  Sent by the server in response to actions which may fail. Status is a boolean
+  indicating whether the pending action succeeded. locmsg is a path to the
+  localisation entry, and message is an English backup description.
+
+top-account-rename newname password
+  Sent by the client. Requests to change the name and password of the current account.
+  The client must wait for an action-status response from the server.
+
+top-account-logout
+  Sent by the client, indicating it is logging out gracefully.
+  The connection terminates after this message.
+
+top-account-delete
+  Sent by the client, indicating it is logging out and wishes to delete its
+  account. The connection terminates after this message.
+
+user-id id
+  Sent by the server informing the client of its integer user ID. This will
+  always be sent BEFORE the action-status.
+
+top-get-subscriber-info
+  Sent by the client. Requests listings of its current subscription info.
+
+subscriber-info user-subscriptions ship-subscriptions
+  Sent by the server informing the client of its current subscription status.
+  user-subscriptions is a list of userids representing the users the current
+  user is subscribed to. ship-subscriptions is a list of shipids of individual
+  ships the current user is subscribed to.
+  Reply to top-get-subscriber-info.
+
+top-subscribe-user userid
+  Sent by the client. Requests to be subscribed to the given user. Any errors
+  adding the subscription are silently ignored.
+  The change applies immediately. No response is generated.
+
+top-subscribe-ship shipid
+  Sent by the client. Requests to be subscribed to the given ship. Any errors
+  adding the subscription are silently ignored.
+  The change applies immediately. No response is generated.
+
+top-unsubscribe-user userid
+  Sent by the client. Requests to be unsubscribed from the given user.
+  This change applies immediately. No response is generated.
+
+top-unsubscribe-ship shipid
+  Sent by the client. Requests to be unsubscribed from the given ship.
+  This change applies immediately. No response is generated.
+
+top-file-lookup userid name
+  Sent by the client. Requests the fileid of the file of the given name
+  owned by the given client. The server will answer with the fileid message.
+
+fileid userid name fileid
+  Sent by the server. Indicates the fileid of a userid, filename pair. If
+  this pair does not exist, the fileid is empty.
+
+top-file-open fileid
+  Sent by the client. Attempts to open the given file for reading.
+  The server will reply with file-info after the operation
+  is performed. After that, the contents of the file are sent in
+  data mode.
+
+top-file-stat fileid
+  Same as top-file-open, but does not actually open the file.
+
+file-info fileid size modified
+  Sent by the server as a response to a top-file-open or top-file-stat
+  request. The fileid matches that sent in the request. size is the number
+  of bytes in the file, or an empty string if the file cannot be read.
+  modified is an integer (like returned by [clock seconds]) indicating
+  the most recent time of modification, or empty if the file cannot be read.
+
+  If this was a response to top-file-open and size is non-empty, the file
+  will be included in data mode after this message.
+
+top-post-file name length public
+  Sent by the client. Posts a file to the server with the given name. If
+  public is true, other users will be able to read the file. After this
+  message, length bytes are to be sent in data mode, the contents of the
+  file.
+  If the file does not yet exist, a new one will be created. Otherwise,
+  the new contents will transparently and atomically replace the old contents,
+  without changing the fileid.
+  When finished, the server will reply with an action-status, using the
+  fileid (which is a non-zero integer) as the success value on success,
+  and the normal parms for failure.
+
+top-whois userid
+  Sent by the client. Requests the friendly name matching the user-id.
+  The server will answer with user-name.
+
+user-name name
+  Sent by the server. Reply to the top-whois message. name is the friendly
+  name of the specified user, or an empty string if no user with the given
+  id exists.
+
+top-file-delete fileid
+  Sent by the client. Deletes the specified file. This succeeds if the file
+  exists and the current user is the owner. The server returns an
+  action-status to indicate whether the operation succeeds.
+
+top-ships-obsolete selfmodtime othermodtime
+  Requests the server to tell the client of any ships it is subscribed to that
+  have been modified after the given time. The server will reply with
+  ships-obsolete.
+  The two modification times represent the last time the client uploaded its
+  files, which is applied to the user's own ships, and the last time the client
+  downloaded ships it does not own, which is applied to everything else. The
+  selfmodtime is applied to the modification time of the backing file, while
+  the othermodtime applies to the time the ship was posted by the nightly batch
+  job.
+
+ships-obsolete shipid fileid owner name ...
+  Sent by the server in answer to top-ships-obsolete. Indicates the ships that
+  must be downloaded, as well as their fileid, owner, and name information.
+
+top-ships-all
+  Sent by the client. Requests a complete list of all ships the user is sub-
+  scribed to. This is used when the client discovers that its stored
+  subscription information is out of sync with the server's.
+
+ship-list-all shipid fileid owner name modified ...
+  Sent by the server in response to top-ships-all. Lists all ships the user is
+  subscribed to. It is up to the client to determine which of these must
+  actually be downloaded.
+
+top-user-ls order first lastex
+  Sent by the client. Requests a list of users from the full list in the given
+  order and between the indices in the list first (inclusive) and lastex
+  (exclusive). The range must be less than 64. The server will answer with
+  user-list. The possible orderings are
+    alphabetic  Sorted ascending by friendlyName (not case-sensitive)
+    numships    Sorted by the number of owned ships
+    popularity  Sorted by total downloads in all ships
+    rating      Sorted by average rating of ships
+
+user-list userid friendlyName ...
+  Sent by the server as an answer to top-user-ls. List user ID and name pairs
+  that match the given criteria.
+
+top-ship-ls userid
+  Sent by the client. Requests a list of ships belonging to the given user. The
+  server will reply with ship-list. If userid does not exist, an empty list is
+  returned. The list will exclude private ships, unless userid matches the
+  current user.
+
+ship-list shipid fileid class shipname ...
+  Sent by the server. Indicates a list of ships, their files, and their friendly
+  names belonging to the user indicated in top-ship-ls. This list excludes
+  private ships, unless it is a list for the current user.
+
+top-record-ship-download shipid
+  Indicates to the server that the client wishes to formally record its
+  download of the given ship. This results in an increment of the ship's
+  download counter, unless the user has already recorded such a download.
+
+top-rate-ship shipid positive?
+  Sent by the client. Indicates a rating on the given ship. Positive is a
+  boolean, true for positive feedback and false for negative. If the user has
+  already rated this ship, the current rating is changed.
+
+top-ship-file-ls
+  Sent by the client. Requests a list of ship files, in the form of fileids and
+  file names. The server will respond with ship-file-list. This list includes
+  private ships.
+  This command always only applies to the current user.
+
+ship-file-list fileid filename ...
+  Sent by the server. Reply to top-ship-file-ls.
+
+top-ship-info shipid
+  Sent by the client. Requests additional information on the given ship (ie,
+  the number of downloads and average rating).
+
+ship-info downloads ratingtotal numratings
+  Returns the number of downloads, the total ratings for the ship, and the
+  number of ratings logged. If the ship does not exist, all values are zero.
+
+top-ai-report species generation instance score comptime
+  Now does nothing. Old behaviour:
+  Files the given performance report for the given species/generation/instance.
+  Arguments:
+    species     Name of species to file against
+    generation  Generation number (so no polution occurs for out-of-date data)
+    instance    Index of particular instance
+    score       Scoring (individual score + team score delta)
+    comptime    Number of milliseconds of in-game time since the previous
+                filing by that client
+
+top-ai-report-2 species generation cortex instance score comptime
+  Logs the performance of a species/generation/cortex/instance quadruple.
+  species:      integer, index of species in AI list
+  generation:   integer, generation number
+  cortex:       integer, type of cortex:
+                  0: reflex
+                  1: avoid_edge
+                  2: dodge
+                  3: run_away
+                  4: frontal
+                  5: navigiton
+                  6: target_analysis
+                  7: strategic_weapon
+                  8: aiming
+                  9: opportunistic_weapon
+                  10:weapon_level
+  instance:     integer, index of instance within cortex type
+  score:        float, score of the quadruple
+  comptime:     number of milliseconds since last report
+
+top-internet-info ipv laddr lport
+  Sent by the client. Prepares Internet connectivity with the given Internet
+  protocol (4 or 6), given what the client sees as its IP address and port
+  number.
+
+internet-ready iaddr iport vnum
+  Sent by the server in response to top-internet-info. Informs the client of its
+  Internet address and port in the protocol specified in top-internet-info, and
+  provides the validation number for the hole-punching service.
+
+  IPv4 connections support NAT with the following rules:
+    If two clients have the same Internet address, they connect to each other
+    via their reported local addresses.
+    If a client's "Internet" address is 192.168.*, that address is replaced by
+    the IP address of abendstern.servegame.com, and its port replaced by a hard-
+    wired table of port-forwarding values.
+    Other clients use each others' Internet addresses.
+  IPv6 connections assume the absense of NAT.
+
+L10N ENTRIES (catalogue N)
+("unspecified" is intended to be undefined)
+name
+  too_short     Name is too short (min 3 chars)
+  too_long      Name is too long (max 3 chars)
+  has_control   Name contains control characters
+  insuf_alpha   Name has too few letters (min 3)
+  duplicate     The given name is already in use
+  bad_prefix    Name begins with a restricted prefix
+file
+  refused       The server refused to work with the file
+  insuf_space   The user has reached his disk usage quota
+login
+  failed        Username/password combination not found
+general
+  success       The operation completed successfully
+  failure       The operation could not be completed
+session
+  timeout       The session has expired
+
+DATABASE TABLES
+-- Stores current Internet games
+-- (The mode and mutator fields are denormalised, technically,
+--  but breaking this data into different tables -- eslecially
+--  mutators -- would be difficult and generally slow things down,
+--  without giving much benefit.)
+CREATE TABLE games (
+  id            INTEGER         NOT NULL        AUTO_INCREMENT,
+  -- Game mode abbreviation (English)
+  mode          CHAR(4)         NOT NULL,
+  -- Mutators (one character for each)
+  mutators      CHAR(4)         NOT NULL,
+  -- Number of teams
+  teams         INTEAER         NOT NULL,
+  -- Maximum class
+  class         CHAR(1)         NOT NULL,
+  -- The IP version used for this game (4 or 6)
+  ipv           INTEGER         NOT NULL,
+  PRIMARY KEY   (id),
+  KEY           (mode),
+  KEY           (mutators),
+  KEY           (teams),
+  KEY           (class),
+  KEY           (ipv)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Stores basic user information
+CREATE TABLE accounts (
+  -- The user's unique, immutable integer identifier
+  userid        INTEGER         NOT NULL        AUTO_INCREMENT,
+  -- The user's unique, but mutable, string identifier
+  name          VARCHAR(48)     NOT NULL,
+  -- The user's unique, but mutable, preferred string identifier.
+  -- This is like name, but is not canonicalised (except for extraneous
+  -- whitespace stripping)
+  friendlyName  VARCHAR(48)     NOT NULL,
+  -- SHA-1 hash of the user's password
+  passwd        CHAR(64)        NOT NULL,
+  -- Set to 1 to enable administrative functions
+  isAdmin       BOOL            NOT NULL        DEFAULT 0,
+  -- Set to 1 if currently logged in
+  isLoggedIn    BOOL            NOT NULL        DEFAULT 0,
+  -- Login is allowed even if loggedIn is 1 if it is older
+  -- than 15 minutes (as the server will periodically update this).
+  lastLogin     TIMESTAMP       NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+  -- Any game the user might currently be playing
+  -- This should (but might not necessarily) reference an
+  -- entry in the games table
+  currentGame   INTEGER                         DEFAULT NULL,
+
+  -- Indexing information
+  -- The index of the user (zero-based) when sorting alphabetically
+  listIxAlpha   INTEGER                         DEFAULT NULL,
+  -- The index when sorting by number of ships
+  listIxNShips  INTEGER                         DEFAULT NULL,
+  -- The index when sorting by popularity of ships
+  listIxPop     INTEGER                         DEFAULT NULL,
+  -- The index when sorting by average rating
+  listIxRate    INTEGER                         DEFAULT NULL,
+
+  -- Client networking information
+  -- (Strictly speaking, this should be a separate table; however, there
+  --  is still a 1:1 correspondance between accounts and this information,
+  --  and this is simpler)
+
+  -- "Proof of authenticity" for hole-punching service
+  secretToken   INTEGER                         DEFAULT NULL,
+  -- Incomming Internet address, IPv4 (binary)
+  iaddress4     INTEGER UNSIGNED                DEFAULT NULL,
+  -- Incomming Internet address, IPv6 (binary, 16-bit values encoded LE)
+  iaddress6     BINARY(16)                      DEFAULT NULL,
+  -- Incomming UDP port
+  iportNumber   SMALLINT UNSIGNED               DEFAULT NULL,
+  -- Reported LAN address, IPv4 (binary)
+  laddress4     INTEGER UNSIGNED                DEFAULT NULL,
+  -- Reported LAN address, IPv6 (binary, 16-bit values encoded LE)
+  laddress6     BINARY(16)                      DEFAULT NULL,
+  -- Reported LAN UDP port
+  lportNumber   SMALLINT UNSIGNED               DEFAULT NULL,
+
+  PRIMARY KEY (userid),
+  UNIQUE KEY name (name),
+  KEY listIxAlpha (listIxAlpha),
+  KEY listIxNShips (listIxNShips),
+  KEY listIxPop (listIxPop),
+  KEY listIxRate (listIxRate),
+  KEY currentGame (currentGame),
+  CONSTRAINT user_in_game
+    FOREIGN KEY (currentGame)
+    REFERENCES games(id)
+    ON DELETE NULL
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Stores files on the server owned by the user
+CREATE TABLE files (
+  -- The file's unique, immutable ID
+  fileid        INTEGER         NOT NULL        AUTO_INCREMENT,
+  -- The file's owner (a userid)
+  owner         INTEGER         NOT NULL,
+  -- The file's name
+  name          VARCHAR(128)    NOT NULL,
+  -- The file's size
+  size          INTEGER         NOT NULL,
+  -- The modification date of the file
+  lastModified  TIMESTAMP       NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+  -- True if non-owners may download the file
+  isPublic      BOOL            NOT NULL        DEFAULT 0,
+  PRIMARY KEY (fileid),
+  UNIQUE KEY unique_names_per_user (owner, name),
+  KEY owner (owner),
+  KEY name (name),
+  KEY lastModified (lastModified),
+  CONSTRAINT file_owner_matches_user
+    FOREIGN KEY (owner)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Stores information on ships
+CREATE TABLE ships (
+  -- The ship's unique, immutable ID
+  shipid        INTEGER         NOT NULL        AUTO_INCREMENT,
+  -- The file that backs the ship
+  fileid        INTEGER         NOT NULL,
+  -- The owner of the file
+  owner         INTEGER         NOT NULL,
+  -- The number of times the ship has been downloaded for saving
+  downloads     INTEGER         NOT NULL        DEFAULT 0,
+  -- The human-readable name of the ship
+  name          VARCHAR(128)                    DEFAULT NULL,
+  -- The class of the ship
+  class         CHAR(1)                         DEFAULT NULL,
+  -- Mirror of isPublic from files
+  isPublic      BOOL            NOT NULL,
+  -- The date the ship was posted by the nightly batch job
+  posted        TIMESTAMP       NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (shipid),
+  KEY fileid (fileid),
+  KEY owner (owner),
+  KEY name (name),
+  KEY posted (posted),
+  CONSTRAINT ship_file_matches_file
+    FOREIGN KEY (fileid)
+    REFERENCES files(fileid)
+    ON DELETE CASCADE,
+  CONSTRAINT ship_owner_matches_user
+    FOREIGN KEY (owner)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Records each users "good" or "poor" rating of ships.
+-- The records go away when the rater or the ship ceases
+-- to exist.
+CREATE TABLE shipRecommendations (
+  -- The ship the rating applies to
+  shipid        INTEGER         NOT NULL,
+  -- The user who submitted the rating
+  userid        INTEGER         NOT NULL,
+  -- Whether the user indicated favourable or not
+  recommended   BOOL            NOT NULL,
+
+  PRIMARY KEY (shipid, userid),
+  KEY shipid (shipid),
+  KEY userid (userid),
+  CONSTRAINT rec_ship_matches_ship
+    FOREIGN KEY (shipid)
+    REFERENCES ships(shipid)
+    ON DELETE CASCADE,
+  CONSTRAINT rec_user_matches_user
+    FOREIGN KEY (userid)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Records which users have downloaded which ships, to
+-- prevent multiple increments of the download column.
+-- The rows in this table are deleted when the user or
+-- ship are; however, this should not affect the downloads
+-- column, so a COUNT(*) should not be used on this table.
+CREATE TABLE shipDownloads (
+  -- The ship downloaded
+  shipid        INTEGER         NOT NULL,
+  -- The user who performed the action
+  userid        INTEGER         NOT NULL,
+
+  PRIMARY KEY (shipid, userid),
+  KEY shipid (shipid),
+  KEY userid (userid),
+  CONSTRAINT sd_ship_matches_ship
+    FOREIGN KEY (shipid)
+    REFERENCES ships(shipid)
+    ON DELETE CASCADE,
+  CONSTRAINT sd_user_matches_user
+    FOREIGN KEY (userid)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Records users who have subscribed to other users' ship collections.
+CREATE TABLE userSubscriptions (
+  subscriber    INTEGER         NOT NULL,
+  subscribee    INTEGER         NOT NULL,
+
+  PRIMARY KEY (subscriber, subscribee),
+  KEY subscriber (subscriber),
+  KEY subscribee (subscribee),
+  CONSTRAINT us_subscriber_is_user
+    FOREIGN KEY (subscriber)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE,
+  CONSTRAINT us_subscribee_is_user
+    FOREIGN KEY (subscribee)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Records the individual ships a user has subscribed to
+CREATE TABLE shipSubscriptions (
+  subscriber    INTEGER         NOT NULL,
+  subscribee    INTEGER         NOT NULL,
+
+  PRIMARY KEY (subscriber, subscribee),
+  KEY subscriber (subscriber),
+  KEY subscribee (subscribee),
+  CONSTRAINT ss_subscriber_is_user
+    FOREIGN KEY (subscriber)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE,
+  CONSTRAINT ss_subscribee_is_ship
+    FOREIGN KEY (subscribee)
+    REFERENCES ships(shipid)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- View to list all the ships a user is subscribed to, as well as
+-- their modification date.
+CREATE OR REPLACE VIEW allSubscriptions
+(subscriber,                  shipid,             fileid,
+ owner,                       modified,           posted,       name) AS SELECT
+userSubscriptions.subscriber, ships.shipid,       ships.fileid,
+ships.owner,                  files.lastModified, ships.posted, ships.name
+FROM (userSubscriptions JOIN ships ON ships.owner = userSubscriptions.subscribee)
+JOIN files ON ships.fileid = files.fileid
+WHERE ships.name IS NOT NULL
+  AND (ships.isPublic = 1 OR ships.owner = userSubscriptions.subscriber)
+UNION SELECT
+shipSubscriptions.subscriber, ships.shipid,       ships.fileid,
+ships.owner,                  files.lastModified, ships.posted, ships.name
+FROM (shipSubscriptions JOIN ships ON ships.shipid = shipSubscriptions.subscribee)
+JOIN files ON ships.fileid = files.fileid
+WHERE ships.name IS NOT NULL
+  AND (ships.isPublic = 1 OR ships.owner = shipSubscriptions.subscriber);
+
+-- Stores AI reports (obsolete).
+-- This is more of a log than a normal table, but the database allows better
+-- scalability and integrity.
+CREATE TABLE aiReports (
+  -- userid of submitter
+  -- The foreign key is intentionally unenforced.
+  userid        INTEGER         NOT NULL,
+  -- AI identification info
+  species       INTEGER         NOT NULL,
+  generation    INTEGER         NOT NULL,
+  instance      INTEGER         NOT NULL,
+  -- Score
+  score         INTEGER         NOT NULL,
+  -- Milliseconds since previous submission by this client
+  -- (allows us to roughly guage computer time used)
+  comptime      BIGINT          NOT NULL,
+  -- Date of record addition
+  addedDate     TIMESTAMP       NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+
+  KEY (species, generation),
+  KEY (species, generation, instance)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Maps cortex integer types to names
+CREATE TABLE caiCortices (
+  type          INTEGER         NOT NULL,
+  name          VARCHAR(32)     NOT NULL,
+  PRIMARY KEY (type),
+  UNIQUE KEY(name)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+INSERT INTO caiCortices (type,name) VALUES
+  (0,   "reflex"        ),
+  (1,   "avoid_edge"    ),
+  (2,   "dodge"         ),
+  (3,   "run_away"      ),
+  (4,   "frontal"       ),
+  (5,   "navigation"    ),
+  (6,   "target_analysis"),
+  (7,   "strategic_weapon"),
+  (8,   "aiming"        ),
+  (9,   "opportunistic_weapon"),
+  (10,  "weapon_level");
+
+-- Stores Cortex AI reports
+-- Like aiReports, but for the cortex-based Genetic AI
+CREATE TABLE caiReports (
+  species       INTEGER         NOT NULL,
+  generation    INTEGER         NOT NULL,
+  cortex        INTEGER         NOT NULL,
+  instance      INTEGER         NOT NULL,
+  score         FLOAT           NOT NULL,
+  comptime      BIGINT          NOT NULL,
+  -- The user who submitted the report
+  -- Foreign key not enforced, because we want the report
+  -- to stay even if the user disappears.
+  submitter     INTEGER         NOT NULL,
+  addedDate     TIMESTAMP       NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+  KEY (species,generation),
+  KEY (instance,cortex),
+  KEY (instance),
+  KEY (cortex),
+  CONSTRAINT cortex_type_to_name
+    FOREIGN KEY (cortex)
+    REFERENCES caiCortices(type)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Stores abbreviated information about the AI's history
+CREATE TABLE oldCAiReports (
+  species       INTEGER         NOT NULL,
+  generation    INTEGER         NOT NULL,
+  cortex        INTEGER         NOT NULL,
+  instance      INTEGER         NOT NULL,
+  avgscore      FLOAT           NOT NULL,
+  comptime      BIGINT          NOT NULL,
+  PRIMARY KEY   (species,generation,cortex,instance),
+  KEY (cortex),
+  CONSTRAINT old_cortex_type_to_name
+    FOREIGN KEY (cortex)
+    REFERENCES caiCortices(type)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
