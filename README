@@ -1,0 +1,22 @@
+abendstern-server
+=================
+
+A collection of files used to set up the Abendstern Network server.
+
+These are probably not useful to anyone else.
+
+abserver.tcl
+  The server implementation; run by inetd.
+geneticai.tcl
+  Used by nightly-batch to advance the genetic AI.
+getpeername.c
+  Utility used by abserver.tcl to determine the identity of the remote host.
+holepunchd.c
+  Daemon for UDP hole-punching (the current implementation is obsolete).
+mpzpowm.c
+mpzrand.c
+  Utilities to perform exponentiation and random number generation, used by
+  abserver.tcl.
+nightly_batch.tcl
+  Script (to be run from a server's headless.tcl) to perform routine
+  maintainence, etc.
