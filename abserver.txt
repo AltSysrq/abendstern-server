@@ -323,6 +323,28 @@ internet-ready iaddr iport vnum
     Other clients use each others' Internet addresses.
   IPv6 connections assume the absense of NAT.
 
+job type ...
+  Sent by the server. Requests the client perform the job specified by
+  type. Further arguments specify any other data needed by the client.
+
+  The client is to perform the job on a best-effort basis. If it cannot, does
+  not want to, or does not know how to, it may indicate that the job has failed
+  without penalty.
+
+job-done ...
+  Sent by the client. Indicates that the job assigned by the "job" message has
+  been completed successfully. Additional arguments specify results.
+
+job-failed
+  Sent by the client. Indicates that the job assigned by the "job" message has
+  failed. This can happen for a number of reasons:
+  + The client was not able to process the request.
+  + The client is not capable of processing this type of request.
+  + The client refused to perform the job.
+  + The client does not know how to perform the job requested.
+  On receiving a job-failed, the server will save the job for later and
+  eventually reassign it (possibly to the same client).
+
 L10N ENTRIES (catalogue N)
 ("unspecified" is intended to be undefined)
 name
@@ -597,6 +619,25 @@ FROM (shipSubscriptions JOIN ships ON ships.shipid = shipSubscriptions.subscribe
 JOIN files ON ships.fileid = files.fileid
 WHERE ships.name IS NOT NULL
   AND (ships.isPublic = 1 OR ships.owner = shipSubscriptions.subscriber);
+
+-- Stores client-side jobs which have not yet been completed.
+CREATE TABLE jobs (
+  -- The unique identifier for this job
+  id            INTEGER         NOT NULL,
+  -- The string to send to the client which instructs it what to do
+  job           VARCHAR(64)     NOT NULL,
+  -- If set to 1, the job failed for the last client. The job must not be sent
+  -- again until this is cleared (usually by the batch job).
+  failed        BOOL            NOT NULL        DEFAULT 0,
+  -- If not null, indicates the date at which a client was assigned the job,
+  -- and that the job was never completed or failed since then. This is used to
+  -- detect jobs which were left after a server crash, etc.
+  -- (This is a BIGINT since MySQL won't let us create a TIMESTAMP with
+  -- DEFAULT NULL for some reason.)
+  startedAt     BIGINT                          DEFAULT NULL,
+
+  PRIMARY KEY   (id)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
 
 -- Stores AI reports (obsolete).
 -- This is more of a log than a normal table, but the database allows better
