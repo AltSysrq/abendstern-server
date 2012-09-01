@@ -335,7 +335,7 @@ job-done ...
   Sent by the client. Indicates that the job assigned by the "job" message has
   been completed successfully. Additional arguments specify results.
 
-job-failed
+job-failed reason
   Sent by the client. Indicates that the job assigned by the "job" message has
   failed. This can happen for a number of reasons:
   + The client was not able to process the request.
@@ -344,6 +344,16 @@ job-failed
   + The client does not know how to perform the job requested.
   On receiving a job-failed, the server will save the job for later and
   eventually reassign it (possibly to the same client).
+
+JOBS
+job render-ship ship-fileid  -->  job-done image-fileid
+  Requests that the client render a ship into an image. Ship-fileid is the ID
+  of a publicly-available file which contains the ship to render. Image-fileid
+  is the ID of a file owned by the current user, which contains a transpartent
+  PNG image containing the graphical rendering of the ship, which should have a
+  linear resolution of about 16 pixels per cell.
+  OpenGL1.4 clients must reject this job, since they can't render ships
+  correctly.
 
 L10N ENTRIES (catalogue N)
 ("unspecified" is intended to be undefined)
