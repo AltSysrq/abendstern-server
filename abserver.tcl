@@ -23,6 +23,9 @@ set DHKE_PRIME_MODULUS 444291e51b3ea5fd16673e95674b01e7b
 set DHKE_BASE 5
 set FILES_DIR /srv/abendstern/files
 set PUBFILES_DIR /srv/abendstern/public
+set WWW_GEN_DIR /srv/www/gen
+set WWW_GEN_DIR_REL /gen
+set WWW_PUBFILES_DIR_REL /pub
 set MAX_MSG_LEN [expr {256*1024}]
 set DISK_QUOTA [expr {32*1024*1024}] ;#32MB
 # Maximum file size is based on glob patterns matching
@@ -1283,6 +1286,97 @@ proc message-admin-delete-file {userid fileid} {
   log info "Admin delete $userid/$fileid"
   DELETE FROM files WHERE fileid = $fileid
   file delete $::FILES_DIR/$userid/$fileid
+}
+
+proc htmlesc {str} {
+  string map [list < "&lt;" > "&gt;" & "&amp;" "\"" "&quot;"] $str
+}
+
+# Generates "dynamic" website pages for each user
+proc message-admin-generate-user-pages {} {
+  log info "Beginning to generate webpages."
+  set users [SELECTALLF userid, friendlyName \
+             FROM accounts \
+             ORDER BY friendlyName]
+  file mkdir $::WWW_GEN_DIR/users
+  # Generate the index
+  log info "index..."
+  set out [open $::WWW_GEN_DIR/users/list.shtml w]
+  puts -nonewline $out \
+"<!--#set var=\"DYN_DOCUMENT_TITLE\" value=\"Users\" -->"
+  puts $out "<!--#include virtual=\"/common.shtml\" -->"
+  puts $out "<h1>Abendstern Users</h1>"
+  foreach {userid friendlyName} $users {
+    puts $out "<h2><a href=\"$::WWW_GEN_DIR_REL/users/$userid.shtml\">"
+    puts $out [htmlesc $friendlyName]
+    puts $out "</a></h2>"
+
+    # Show some of the user's ships
+    puts $out "<div class=\"shipthumblist\">"
+    foreach {shipid shipname} [SELECTALLF shipid, name \
+                               FROM ships \
+                               WHERE owner = $userid \
+                               AND rendered \
+                               AND isPublic \
+                               ORDER BY rand() \
+                               LIMIT 4] {
+      set img $::WWW_PUBFILES_DIR_REL/shipthumbs/$shipid.png
+      puts $out "<div class=\"shipthumb\">"
+      puts $out "<a href=\"$img\">"
+      puts $out "&quot;[htmlesc $shipname]&quot;</a><br />"
+      puts $out "<a href=\"$img\">"
+      puts $out "<img class=\"shipthumbimg\" src=\"$img\" alt=\"Thumbnail\" />"
+      puts $out "</a></div>"
+    }
+    puts $out "</div>"
+  }
+
+  puts $out "<!--#include virtual=\"/commonend.shtml\" -->"
+
+  close $out
+  log info "index done."
+
+  # Generate a page for each user
+  foreach {userid friendlyName} $users {
+    log info "pages for $userid ($friendlyName)..."
+    set escapedName [htmlesc $friendlyName]
+    set out [open $::WWW_GEN_DIR/users/$userid.shtml w]
+    puts -nonewline $out \
+"<!--#set var=\"DYN_DOCUMENT_TITLE\" value=\"User: $escapedName\" -->"
+    puts $out "<!--#include virtual=\"/common.shtml\" -->"
+    puts $out "<h1>$escapedName</h1>"
+    set ships [SELECTALLF shipid, name, class \
+               FROM ships \
+               WHERE owner = $userid \
+               AND isPublic \
+               AND rendered \
+               ORDER BY class, name]
+    foreach clazz {C B A} {
+      puts $out "<h2>Class $clazz Ships</h2>"
+      puts $out "<div class=\"shipthumblist\">"
+      foreach {shipid shipname class} $ships {
+        if {$class eq $clazz} {
+          set img $::WWW_PUBFILES_DIR_REL/shipthumbs/$shipid.png
+          puts $out "<div class=\"shipthumb\">"
+          puts $out "<a href=\"$img\">"
+          puts $out "&quot;[htmlesc $shipname]&quot;</a><br />"
+          puts $out "<a href=\"$img\">"
+          puts $out "<img class=\"shipthumbimg\" src=\"$img\" alt=\"Thumbnail\" />"
+          puts $out "</a></div>"
+        }
+      }
+      puts $out "</div>"
+
+      log info "pages for $userid done"
+    }
+
+    puts $out "<!--#include virtual=\"/commonend.shtml\" -->"
+    close $out
+  }
+
+  log info "done"
+  wl [list action-status yes {general success} \
+      "The operation completed successfully"]
 }
 
 proc job-done-render-ship {jobid fileid} {

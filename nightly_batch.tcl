@@ -133,6 +133,19 @@ if {!$::abnet::success} {
   error batch
 }
 
+# Generate webpages
+set ::abnet::busy yes
+set ::abnet::currentAction generic
+set ::abnet::lastReceive [expr {[clock seconds]+300}]
+::abnet::enable action-status
+::abnet::writeServer admin-generate-user-pages
+vwait ::abnet::busy
+
+if {!$::abnet::success} {
+  puts stderr "Error updating webpages"
+  error batch
+}
+
 # Done
 ::mysql::close $mcxn
 ::abnet::logout
