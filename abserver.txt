@@ -636,7 +636,7 @@ WHERE ships.name IS NOT NULL
 -- Stores client-side jobs which have not yet been completed.
 CREATE TABLE jobs (
   -- The unique identifier for this job
-  id            INTEGER         NOT NULL,
+  id            INTEGER         NOT NULL        AUTO_INCREMENT,
   -- The string to send to the client which instructs it what to do
   job           VARCHAR(64)     NOT NULL,
   -- If set to 1, the job failed for the last client. The job must not be sent

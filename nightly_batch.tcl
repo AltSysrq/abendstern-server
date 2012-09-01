@@ -5,6 +5,7 @@
 package require mysqltcl
 source credentials
 source geneticai.tcl
+source batchjobs.tcl
 
 set ::abnet::SERVER localhost
 set DATABASE abendstern
@@ -94,10 +95,12 @@ foreach {userid fileid shipid isPublic} $shipsToCheck {
   set name "'[::mysql::escape $name]'"
   # The ship loader already validated that class is "A", "B", or "C"
   if {"" != $shipid} {
+    # The ship already exists, so update the data. Also reset rendered to false
+    # so that a job is scheduled for it later.
     ::mysql::exec $mcxn \
       "UPDATE ships
        SET name = $name, class = '[$ str tmpship.info.class]',
-           isPublic = $isPublic, posted = NOW()
+           isPublic = $isPublic, posted = NOW(), rendered = 0
        WHERE shipid = $shipid"
   } else {
     ::mysql::exec $mcxn \
@@ -112,6 +115,9 @@ foreach {userid fileid shipid isPublic} $shipsToCheck {
 
 delete object $field
 # END: SHIP VALIDATION
+
+# Update batch job listing
+update-batch-jobs
 
 # Update indices
 set ::abnet::busy yes
