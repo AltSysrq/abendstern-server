@@ -511,6 +511,9 @@ CREATE TABLE ships (
   isPublic      BOOL            NOT NULL,
   -- The date the ship was posted by the nightly batch job
   posted        TIMESTAMP       NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+  -- Whether the ship has an up-to-date image rendering;
+  -- if false, a ship-render job must be scheduled if there isn't one already.
+  rendered      BOOL            NOT NULL        DEFAULT 0,
 
   PRIMARY KEY (shipid),
   KEY fileid (fileid),
