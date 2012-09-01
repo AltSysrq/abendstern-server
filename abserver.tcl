@@ -22,6 +22,7 @@ set MAXVERSION 0
 set DHKE_PRIME_MODULUS 444291e51b3ea5fd16673e95674b01e7b
 set DHKE_BASE 5
 set FILES_DIR /srv/abendstern/files
+set PUBFILES_DIR /srv/abendstern/public
 set MAX_MSG_LEN [expr {256*1024}]
 set DISK_QUOTA [expr {32*1024*1024}] ;#32MB
 # Maximum file size is based on glob patterns matching
@@ -39,13 +40,15 @@ set FILE_BLOCK_SZ 4096
 #   !   Defunct user
 set RESTRICTED_PREFICES [list ~ # !]
 
+set JOB_CHECK_INTERVAL 60
+
 # Global vars
 set inputMode plain
 set outputMode plain
 lassign [exec getpeername] remoteAddr remotePort
 set remoteUDPPort unknown
 
-set enabledMessages [list error abendstern ping]
+set enabledMessages [list error abendstern ping make-me-a-slave]
 set isRunning yes
 
 set dhke_secret {}
@@ -502,7 +505,8 @@ proc message-ping {} {
   # Assign a job if logged in, there is no current job, and we haven't checked
   # for a job in the last minute.
   set now [clock seconds]
-  if {$::userid ne {} && $::jobid eq {} && $now > $::lastJobCheck &&
+  if {$::userid ne {} && $::jobid eq {} &&
+      $now > $::lastJobCheck+$::JOB_CHECK_INTERVAL &&
       $::REMOTE_EXACT_VERSION > 20120721212256} {
     set ::lastJobCheck $now
     TRANSACTION {
@@ -1105,8 +1109,12 @@ proc message-top-ship-file-ls {} {
 proc message-top-file-delete fileid {
   assert_integer $fileid
   TRANSACTION {
-    DELETE FROM files WHERE owner = $::userid AND fileid = $fileid
-    file delete $::FILES_DIR/$::userid/$fileid
+    if {[SELECTR size FROM files \
+         WHERE owner = $::userid AND fileid = $fileid]} {
+      DELETE FROM files WHERE owner = $::userid AND fileid = $fileid
+      file delete $::FILES_DIR/$::userid/$fileid
+      incr ::diskUsage -[effectiveSize $size]
+    }
   }
   wl [list action-status yes {general success} "The operation completed successfully"]
 }
@@ -1165,6 +1173,11 @@ proc message-job-failed {why} {
   set ::jobid {}
   UPDATE jobs SET failed = 1, startedAt = NULL WHERE id = $jobid
   log warn "Job $jobid failed: $why"
+}
+
+proc message-make-me-a-slave {} {
+  log info "Entering slave mode."
+  set ::JOB_CHECK_INTERVAL 0
 }
 
 # Update the user index listings
@@ -1274,10 +1287,9 @@ proc message-admin-delete-file {userid fileid} {
 
 proc job-done-render-ship {jobid fileid} {
   assert_integer $fileid
-  # Ensure the file belongs to the user
-  SELECTR COUNT(*) FROM files \
-  WHERE fileid = $fileid AND owner = $::userid
-  if {${COUNT(*)} != 1} {
+  # Ensure the file belongs to the user, also get the size
+  if {![SELECTR size FROM files \
+        WHERE fileid = $fileid AND owner = $::userid]} {
     error "File $filed does not exist or does not belong to $::userid"
   }
 
@@ -1300,9 +1312,10 @@ proc job-done-render-ship {jobid fileid} {
 
   # Move it to the ship thumbnails directory
   file rename -force -- $::FILES_DIR/$::userid/$fileid \
-      $::FILES_DIR/shipthumbs/$shipid.png
+      $::PUBFILES_DIR/shipthumbs/$shipid.png
   # Remove the file from the database
   DELETE FROM files WHERE fileid = $fileid
+  incr ::diskUsage -[effectiveSize $size]
 
   # Mark the ship as rendered
   UPDATE ships SET rendered = 1 WHERE shipid = $shipid

@@ -345,6 +345,12 @@ job-failed reason
   On receiving a job-failed, the server will save the job for later and
   eventually reassign it (possibly to the same client).
 
+make-me-a-slave
+  Sent by the client. Indicates the client wishes to perform as many jobs as
+  possible. This action cannot be undone; it persists until the connection is
+  terminated. After issuing this message, any ping message sent when there is
+  not currently a job will result in a job being assigned.
+
 JOBS
 job render-ship ship-fileid  -->  job-done image-fileid
   Requests that the client render a ship into an image. Ship-fileid is the ID
