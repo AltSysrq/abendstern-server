@@ -59,6 +59,10 @@ set outputsSinceKeyChange 0
 set isAdmin no
 set diskUsage {}
 
+set jobid {}
+set jobCallback {}
+set lastJobCheck [clock seconds]
+
 set exitHooks {}
 
 # We need to reset the lastLogin field periodically (at least
@@ -494,7 +498,26 @@ proc effectiveSize sz {
   }
 }
 
-proc message-ping {} {}
+proc message-ping {} {
+  # Assign a job if logged in, there is no current job, and we haven't checked
+  # for a job in the last minute.
+  set now [clock seconds]
+  if {$::userid ne {} && $::jobid eq {} && $now > $::lastJobCheck &&
+      $::REMOTE_EXACT_VERSION > 20120721212256} {
+    set ::lastJobCheck $now
+    TRANSACTION {
+      if {[SELECTR {id job} FROM jobs \
+           WHERE failed = 0 AND startedAt IS NULL LIMIT 1]} {
+        UPDATE jobs SET startedAt = $now WHERE id = $id
+        set ::jobid $id
+        set ::jobCallback "job-done-[lindex $job 0]"
+        enable job-done job-failed
+        log info "Assigning job $::jobid"
+        wl [list job {*}$job]
+      }
+    }
+  }
+}
 
 proc message-error {l10n msg} {
   global isRunning
@@ -503,6 +526,12 @@ proc message-error {l10n msg} {
 
 proc message-abendstern {netwvers longvers} {
   global MINVERSION MAXVERSION isRunning
+  if {![string is wideinteger -strict $netwvers] ||
+      ![string is wideinteger -strict $longvers]} {
+    log info "Rejecting invalid version combo $netwvers/$longvers"
+    sendError "Bad version"
+    return
+  }
   if {$netwvers < $MINVERSION || $netwvers > $MAXVERSION} {
     log info "Rejecting incompatible version $netwvers/$longvers"
     sendError "Incompatible version $netwvers"
@@ -1121,6 +1150,23 @@ proc message-top-ai-report-2 {species generation cortex
   ($::userid, $species, $generation, $cortex, $instance, $score, $comptime)
 }
 
+proc message-job-done {args} {
+  disable job-done job-failed
+  set jobid $::jobid
+  set ::jobid {}
+  $::jobCallback $jobid {*}$args
+  DELETE FROM jobs WHERE id = $jobid
+  log info "Job $jobid completed successfully."
+}
+
+proc message-job-failed {why} {
+  disable job-done job-failed
+  set jobid $::jobid
+  set ::jobid {}
+  UPDATE jobs SET failed = 1, startedAt = NULL WHERE id = $jobid
+  log warn "Job $jobid failed: $why"
+}
+
 # Update the user index listings
 proc message-admin-update-indices {} {
   log info "Begin updating indices"
@@ -1224,6 +1270,42 @@ proc message-admin-delete-file {userid fileid} {
   log info "Admin delete $userid/$fileid"
   DELETE FROM files WHERE fileid = $fileid
   file delete $::FILES_DIR/$userid/$fileid
+}
+
+proc job-done-render-ship {jobid fileid} {
+  assert_integer $fileid
+  # Ensure the file belongs to the user
+  SELECTR COUNT(*) FROM files \
+  WHERE fileid = $fileid AND owner = $::userid
+  if {${COUNT(*)} != 1} {
+    error "File $filed does not exist or does not belong to $::userid"
+  }
+
+  if {![SELECTR job FROM jobs WHERE id = $jobid]} {
+    log error "Job $jobid seems to have disappeared!"
+    return
+  }
+
+  set shipFileId [lindex $job 1]
+  if {![SELECTR shipid FROM ships WHERE fileid = $shipFileId]} {
+    log warn "The ship $shipd has been deleted since $jobid completed"
+    return
+  }
+
+  # Ensure the file is a PNG
+  set mimeType [exec file -b --mime-type $::FILES_DIR/$::userid/$fileid]
+  if {[string trim $mimeType] != "image/png"} {
+    error "'Tis a lie! $::userid/$fileid isn't a ship image, it's a $mimeType!"
+  }
+
+  # Move it to the ship thumbnails directory
+  file rename -force -- $::FILES_DIR/$::userid/$fileid \
+      $::FILES_DIR/shipthumbs/$shipid.png
+  # Remove the file from the database
+  DELETE FROM files WHERE fileid = $fileid
+
+  # Mark the ship as rendered
+  UPDATE ships SET rendered = 1 WHERE shipid = $shipid
 }
 
 main
