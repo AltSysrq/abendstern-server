@@ -388,6 +388,9 @@ proc SELECTRA {what args} {
     foreach var $tclvars sql $sqlargs {
       uplevel [list set $var [set $sql]]
     }
+    return 1
+  } else {
+    return 0
   }
 }
 
@@ -1307,8 +1310,19 @@ proc message-admin-generate-user-pages {} {
   puts $out "<!--#include virtual=\"/common.shtml\" -->"
   puts $out "<h1>Abendstern Users</h1>"
   foreach {userid friendlyName} $users {
+    if {![SELECTRA {COUNT(*) numShips} \
+          FROM ships \
+          WHERE owner = $userid \
+          AND isPublic]} {
+      set numShips 0
+    }
+    if {$numShips == 1} {
+      set pluralShips ship
+    } else {
+      set pluralShips ships
+    }
     puts $out "<h2><a href=\"$::WWW_GEN_DIR_REL/users/$userid.shtml\">"
-    puts $out [htmlesc $friendlyName]
+    puts $out "[htmlesc $friendlyName] ($numShips public $pluralShips)"
     puts $out "</a></h2>"
 
     # Show some of the user's ships
