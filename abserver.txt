@@ -645,9 +645,9 @@ CREATE TABLE jobs (
   id            INTEGER         NOT NULL        AUTO_INCREMENT,
   -- The string to send to the client which instructs it what to do
   job           VARCHAR(64)     NOT NULL,
-  -- If set to 1, the job failed for the last client. The job must not be sent
-  -- again until this is cleared (usually by the batch job).
-  failed        BOOL            NOT NULL        DEFAULT 0,
+  -- Tracks how many times the given job has failed since its creation. Jobs
+  -- with too high a failure count are deleted.
+  failed        INTEGER         NOT NULL        DEFAULT 0,
   -- If not null, indicates the date at which a client was assigned the job,
   -- and that the job was never completed or failed since then. This is used to
   -- detect jobs which were left after a server crash, etc.

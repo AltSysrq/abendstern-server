@@ -14,7 +14,7 @@ proc update-batch-jobs {} {
   foreach {id job failed startedAt} $jobs {
     if {$failed || ($startedAt ne {} && $startedAt < $then)} {
       # Make ready for new run
-      ::mysql::exec $mcxn "UPDATE jobs SET startedAt = NULL
+      ::mysql::exec $mcxn "UPDATE jobs SET startedAt = NULL, failed = failed+1
                            WHERE id = $id"
     }
 
@@ -34,4 +34,7 @@ proc update-batch-jobs {} {
           "INSERT INTO jobs (job) values ('$job')"
     }
   }
+
+  # Delete jobs which have failed too many times
+  ::mysql::exec $mcxn "DELETE FROM jobs WHERE failed > 8"
 }

@@ -517,7 +517,7 @@ proc message-ping {} {
     set ::lastJobCheck $now
     TRANSACTION {
       if {[SELECTR {id job} FROM jobs \
-           WHERE failed = 0 AND startedAt IS NULL LIMIT 1]} {
+           WHERE startedAt IS NULL LIMIT 1]} {
         UPDATE jobs SET startedAt = $now WHERE id = $id
         set ::jobid $id
         set ::jobCallback "job-done-[lindex $job 0]"
@@ -1177,7 +1177,7 @@ proc message-job-failed {why} {
   disable job-done job-failed
   set jobid $::jobid
   set ::jobid {}
-  UPDATE jobs SET failed = 1, startedAt = NULL WHERE id = $jobid
+  UPDATE jobs SET failed = failed+1, startedAt = NULL WHERE id = $jobid
   log warn "Job $jobid failed: $why"
 }
 
