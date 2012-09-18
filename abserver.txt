@@ -499,6 +499,51 @@ CREATE TABLE files (
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET='utf8';
 
+-- List of possible ship categories
+CREATE TABLE shipCategories (
+  id            INTEGER         NOT NULL,
+  name          VARCHAR(15)     NOT NULL,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+-- Insert id/name pairs.
+-- These match the numbers of the Ship::Category enum.
+INSERT INTO shipCategories (id, name) VALUES
+  (0, 'Swarm'),
+  (1, 'Interceptor'),
+  (2, 'Fighter'),
+  (3, 'Attacker'),
+  (4, 'Subcapital'),
+  (5, 'Defender');
+
+-- Maps categories to the intended win/loss relations between the categories.
+CREATE TABLE shipCategoryRelations (
+  win           INTEGER         NOT NULL,
+  lose          INTEGER         NOT NULL,
+
+  PRIMARY KEY (win,lose),
+  KEY (win),
+  KEY (lose),
+  CONSTRAINT scr_win_matches_sc
+    FOREIGN KEY (win)
+    REFERENCES shipCategories(id),
+  CONSTRAINT src_lose_matches_sc
+    FOREIGN KEY (lose)
+    REFERENCES shipCategories(id)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+INSERT INTO shipCategoryRelations (win,lose) VALUES
+  (0,2),
+  (0,3),
+  (1,0),
+  (1,2),
+  (2,3),
+  (2,5),
+  (3,5),
+  (3,4),
+  (4,0),
+  (4,1),
+  (5,4),
+  (5,3);
+
 -- Stores information on ships
 CREATE TABLE ships (
   -- The ship's unique, immutable ID
@@ -520,12 +565,15 @@ CREATE TABLE ships (
   -- Whether the ship has an up-to-date image rendering;
   -- if false, a ship-render job must be scheduled if there isn't one already.
   rendered      BOOL            NOT NULL        DEFAULT 0,
+  -- The category of this ship
+  category      INTEGER                         DEFAULT NULL,
 
   PRIMARY KEY (shipid),
   KEY fileid (fileid),
   KEY owner (owner),
   KEY name (name),
   KEY posted (posted),
+  KEY category (category)
   CONSTRAINT ship_file_matches_file
     FOREIGN KEY (fileid)
     REFERENCES files(fileid)
@@ -533,7 +581,10 @@ CREATE TABLE ships (
   CONSTRAINT ship_owner_matches_user
     FOREIGN KEY (owner)
     REFERENCES accounts(userid)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
+  CONSTRAINT ship_category_matches_sc
+    FOREIGN KEY (category)
+    REFERENCES shipCategories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET='utf8';
 
 -- Records each users "good" or "poor" rating of ships.

@@ -72,6 +72,8 @@ foreach {userid fileid shipid isPublic} $shipsToCheck {
     continue
   }
 
+  set category [shipCategoryToInt [$ship categorise]]
+
   # Done with the ship itself
   delete object $ship
 
@@ -100,12 +102,14 @@ foreach {userid fileid shipid isPublic} $shipsToCheck {
     ::mysql::exec $mcxn \
       "UPDATE ships
        SET name = $name, class = '[$ str tmpship.info.class]',
-           isPublic = $isPublic, posted = NOW(), rendered = 0
+           isPublic = $isPublic, posted = NOW(), rendered = 0,
+           category = $category
        WHERE shipid = $shipid"
   } else {
     ::mysql::exec $mcxn \
-      "INSERT INTO ships (fileid, owner, name, class, isPublic, posted)
-       VALUES ($fileid, $userid, $name, '[$ str tmpship.info.class]', $isPublic, NOW())"
+      "INSERT INTO ships(fileid, owner, name, class, isPublic, posted, category)
+       VALUES ($fileid, $userid, $name, '[$ str tmpship.info.class]',
+               $isPublic, NOW(), $category)"
   }
 
   $ unmodify tmpship
