@@ -519,7 +519,7 @@ proc message-ping {} {
       if {[SELECTRA {jobs.id id jobs.job job} \
            FROM jobs \
            LEFT JOIN jobFailures \
-           ON jobs.id = jobFailures.id \
+           ON jobs.id = jobFailures.job \
            AND jobFailures.user = $::userid \
            WHERE jobs.startedAt IS NULL \
            AND jobFailures.id IS NULL \
