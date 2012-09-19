@@ -45,10 +45,11 @@ proc update-batch-jobs {} {
   ::mysql::sel $mcxn [format {
     INSERT INTO jobs (job, createdAt)
     SELECT CONCAT('ship-match ',
-                  test.fileid,
-                  ' 1 ',
-                  against.fileid,
-                  ' 1'), %d
+                  test.fileid, ' ',
+                  shipCategoryRelations.nwin, ' ',
+                  against.fileid, ' ',
+                  shipCategoryRelations.nlose
+                  ), %d
     FROM ships AS test
     JOIN shipCategoryRelations
     ON test.category = shipCategoryRelations.win
