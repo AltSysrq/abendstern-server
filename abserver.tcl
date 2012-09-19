@@ -517,7 +517,8 @@ proc message-ping {} {
     set ::lastJobCheck $now
     TRANSACTION {
       if {[SELECTR {id job} FROM jobs \
-           WHERE startedAt IS NULL LIMIT 1]} {
+           WHERE startedAt IS NULL LIMIT 1 \
+           FOR UPDATE]} {
         UPDATE jobs SET startedAt = $now WHERE id = $id
         set ::jobid $id
         set ::jobCallback "job-done-[lindex $job 0]"
