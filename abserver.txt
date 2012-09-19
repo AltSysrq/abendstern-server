@@ -601,13 +601,22 @@ CREATE TABLE ships (
     REFERENCES shipCategories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET='utf8';
 
-CREATE OR REPLACE VIEW bestShips
-(shipid, fileid, owner, name, class, category, aiscore) AS SELECT
- shipid, fileid, owner, name, class, category, aiscore
+CREATE OR REPLACE VIEW bestShipsMaxima
+(class, category, aiscore) AS SELECT
+ class, category, MAX(aiscore)
 FROM ships
 WHERE isPublic
-GROUP BY class, category
-HAVING aiscore = MAX(aiscore);
+GROUP BY class, category;
+
+CREATE OR REPLACE VIEW bestShips
+(shipid, fileid, owner, name, class, category, aiscore) AS SELECT
+ shipid, fileid, owner, name, ships.class, ships.category, ships.aiscore
+FROM ships
+JOIN bestShipsMaxima
+ON ships.class = bestShipsMaxima.class
+AND ships.category = bestShipsMaxima.category
+AND ships.aiscore = bestShipsMaxima.aiscore
+GROUP BY ships.class, ships.category;
 
 -- Records each users "good" or "poor" rating of ships.
 -- The records go away when the rater or the ship ceases
