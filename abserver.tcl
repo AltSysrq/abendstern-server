@@ -1177,7 +1177,10 @@ proc message-job-failed {why} {
   disable job-done job-failed
   set jobid $::jobid
   set ::jobid {}
-  UPDATE jobs SET failed = failed+1, startedAt = NULL WHERE id = $jobid
+  # Just let the batch job fail this job by noticing it has timed out, so we
+  # don't immediately reassign the same job to the client that couldn't process
+  # it.
+  #UPDATE jobs SET failed = failed+1, startedAt = NULL WHERE id = $jobid
   log warn "Job $jobid failed: $why"
 }
 
