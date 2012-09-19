@@ -53,6 +53,7 @@ proc update-batch-jobs {} {
     JOIN bestShips AS against
     ON test.class = against.class
     AND shipCategoryRelations.lose = against.category
+    WHERE test.isPublic
   }
 
 
