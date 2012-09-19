@@ -54,6 +54,7 @@ proc update-batch-jobs {} {
     ON test.class = against.class
     AND shipCategoryRelations.lose = against.category
     WHERE test.isPublic
+    ORDER BY rand()
   }
 
 
