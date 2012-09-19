@@ -616,6 +616,7 @@ JOIN bestShipsMaxima
 ON ships.class = bestShipsMaxima.class
 AND ships.category = bestShipsMaxima.category
 AND ships.aiscore = bestShipsMaxima.aiscore
+AND ships.isPublic
 GROUP BY ships.class, ships.category;
 
 -- Records each users "good" or "poor" rating of ships.
