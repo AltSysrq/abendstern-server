@@ -9,7 +9,8 @@ proc update-batch-jobs {} {
   # Reset jobs which failed or which were started more than (about) a day ago
   # Also build a set to allow quickly finding whether a job exists.
   set now [clock seconds]
-  set then [expr {$now - 24*3600}]
+  set then [expr {$now - 3600}]
+  set lastWeek [expr {$now - 24*3600*7}]
   set jobsExisting {}
   foreach {id job failed startedAt} $jobs {
     if {$failed || ($startedAt ne {} && $startedAt < $then)} {
@@ -20,6 +21,7 @@ proc update-batch-jobs {} {
 
     dict set jobsExisting $job {}
   }
+  ::mysql::exec $mcxn "DELETE FROM jobs WHERE createdAt < $lastWeek"
 
   # Create rendering jobs for public ships which do not have up-to-date
   # renderings.
@@ -31,7 +33,7 @@ proc update-batch-jobs {} {
     if {![dict exists $jobsExisting $job]} {
       dict set jobsExisting $job {}
       ::mysql::exec $mcxn \
-          "INSERT INTO jobs (job) values ('$job')"
+          "INSERT INTO jobs (job, createdAt) values ('$job', [clock seconds])"
     }
   }
 
@@ -40,13 +42,13 @@ proc update-batch-jobs {} {
                        WHERE job LIKE 'ship-match %' AND startedAt IS NULL"
 
   # Get new ship pairings
-  ::mysql::sel $mcxn {
-    INSERT INTO jobs (job)
+  ::mysql::sel $mcxn [format {
+    INSERT INTO jobs (job, createdAt)
     SELECT CONCAT('ship-match ',
                   test.fileid,
                   ' 1 ',
                   against.fileid,
-                  ' 1')
+                  ' 1'), %d
     FROM ships AS test
     JOIN shipCategoryRelations
     ON test.category = shipCategoryRelations.win
@@ -55,7 +57,7 @@ proc update-batch-jobs {} {
     AND shipCategoryRelations.lose = against.category
     WHERE test.isPublic
     ORDER BY rand()
-  }
+  } [clock seconds]]
 
 
   # Delete jobs which have failed too many times

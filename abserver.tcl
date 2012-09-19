@@ -516,8 +516,14 @@ proc message-ping {} {
       $::REMOTE_EXACT_VERSION > 20120721212256} {
     set ::lastJobCheck $now
     TRANSACTION {
-      if {[SELECTR {id job} FROM jobs \
-           WHERE startedAt IS NULL LIMIT 1 \
+      if {[SELECTRA {jobs.id id jobs.job job} \
+           FROM jobs \
+           LEFT JOIN jobFailures \
+           ON jobs.id = jobFailures.id \
+           AND jobFailures.user = $::userid \
+           WHERE jobs.startedAt IS NULL \
+           AND jobFailures.id IS NULL \
+           LIMIT 1 \
            FOR UPDATE]} {
         UPDATE jobs SET startedAt = $now WHERE id = $id
         set ::jobid $id
@@ -1178,10 +1184,8 @@ proc message-job-failed {why} {
   disable job-done job-failed
   set jobid $::jobid
   set ::jobid {}
-  # Just let the batch job fail this job by noticing it has timed out, so we
-  # don't immediately reassign the same job to the client that couldn't process
-  # it.
-  #UPDATE jobs SET failed = failed+1, startedAt = NULL WHERE id = $jobid
+  INSERT INTO jobFailures (user, job) VALUES ($::userid, $jobid)
+  UPDATE jobs SET failed = failed+1, startedAt = NULL WHERE id = $jobid
   log warn "Job $jobid failed: $why"
 }
 

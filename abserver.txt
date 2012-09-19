@@ -737,8 +737,32 @@ CREATE TABLE jobs (
   -- (This is a BIGINT since MySQL won't let us create a TIMESTAMP with
   -- DEFAULT NULL for some reason.)
   startedAt     BIGINT                          DEFAULT NULL,
+  -- The date at which this job was created.
+  -- Jobs which were created too long ago are deleted regardless of how many
+  -- times they have failed.
+  createdAt     BIGINT          NOT NULL,
 
   PRIMARY KEY   (id)
+) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+-- Stores jobs which failed on certain clients, so that they are not re-sent to
+-- the same client.
+CREATE TABLE jobFailures (
+  id            INTEGER         NOT NULL        AUTO_INCREMENT,
+  user          INTEGER         NOT NULL,
+  job           INTEGER         NOT NULL,
+
+  PRIMARY KEY (id),
+  KEY (user),
+  KEY (job),
+  CONSTRAINT jobFailures_user
+    FOREIGN KEY (user)
+    REFERENCES accounts(userid)
+    ON DELETE CASCADE,
+  CONSTRAINT jobFailures_job
+    FOREIGN KEY (job)
+    REFERENCES jobs(id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET='utf8';
 
 -- Stores AI reports (obsolete).
