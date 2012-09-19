@@ -361,6 +361,16 @@ job render-ship ship-fileid  -->  job-done image-fileid
   OpenGL1.4 clients must reject this job, since they can't render ships
   correctly.
 
+job ship-match ship-to-test sttc ship-against sac -> job-done score
+  Requests that the client perform a simulated match of sttc ships stored in
+  the fileid ship-to-test, versus sac ships stored in ship-against. The
+  simulation takes place in a 3x3 regular field, and lasts for up to one minute
+  of virtual time. Score is equal to the base score muliplied by the portion of
+  that virtual minute remaining when the match terminates, divided by two, plus
+  one half. The base score is equal to the portion of sac destroyed minus the
+  portion of sttc destroyed; thus, it is a floating-point value between -1 and
+  +1, inclusive.
+
 L10N ENTRIES (catalogue N)
 ("unspecified" is intended to be undefined)
 name
@@ -394,7 +404,7 @@ CREATE TABLE games (
   -- Mutators (one character for each)
   mutators      CHAR(4)         NOT NULL,
   -- Number of teams
-  teams         INTEAER         NOT NULL,
+  teams         INTEGER         NOT NULL,
   -- Maximum class
   class         CHAR(1)         NOT NULL,
   -- The IP version used for this game (4 or 6)
@@ -567,6 +577,10 @@ CREATE TABLE ships (
   rendered      BOOL            NOT NULL        DEFAULT 0,
   -- The category of this ship
   category      INTEGER                         DEFAULT NULL,
+  -- The current "AI score" of the ship. Each time a ship-match job is
+  -- completed which tests this ship, mix the new value into this
+  -- (eg, aiscore = 0.9*aiscore + 0.1*$newscore)
+  aiscore       FLOAT           NOT NULL        DEFAULT 0,
 
   PRIMARY KEY (shipid),
   KEY fileid (fileid),
@@ -586,6 +600,14 @@ CREATE TABLE ships (
     FOREIGN KEY (category)
     REFERENCES shipCategories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET='utf8';
+
+CREATE OR REPLACE VIEW bestShips
+(shipid, fileid, owner, name, class, category, aiscore) AS SELECT
+ shipid, fileid, owner, name, class, category, aiscore
+FROM ships
+WHERE isPublic
+GROUP BY class, category
+HAVING aiscore = MAX(aiscore);
 
 -- Records each users "good" or "poor" rating of ships.
 -- The records go away when the rater or the ship ceases

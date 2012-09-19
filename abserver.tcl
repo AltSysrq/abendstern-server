@@ -1429,4 +1429,19 @@ proc job-done-render-ship {jobid fileid} {
   UPDATE ships SET rendered = 1 WHERE shipid = $shipid
 }
 
+proc job-done-ship-match {jobid score} {
+  if {![string is double -strict $score] ||
+      $score < -1.0 || $score > +1.0} {
+    error "Invalid ship-match score: $score"
+  }
+
+  if {![SELECTR job FROM jobs WHERE id = $jobid]} {
+    log error "Job $jobid seems to have disappeared!"
+  }
+
+  UPDATE ships \
+  SET aiscore = 0.9*aiscore + 0.1*$score \
+  WHERE fileid = [lindex $job 1]
+}
+
 main

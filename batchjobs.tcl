@@ -35,6 +35,27 @@ proc update-batch-jobs {} {
     }
   }
 
+  # Clear ship-match jobs which are not in-progress
+  ::mysql::exec $mcxn "DELETE FROM jobs
+                       WHERE job LIKE 'ship-match %' AND startedAt IS NULL"
+
+  # Get new ship pairings
+  ::mysql::sel $mcxn {
+    INSERT INTO jobs (job)
+    SELECT CONCAT('ship-match ',
+                  test.fileid,
+                  ' 1 ',
+                  against.fileid,
+                  ' 1')
+    FROM ships AS test
+    JOIN shipCategoryRelations
+    ON test.category = shipCategoryRelations.win
+    JOIN bestShips AS against
+    ON test.class = against.class
+    AND shipCategoryRelations.lose = against.category
+  }
+
+
   # Delete jobs which have failed too many times
   ::mysql::exec $mcxn "DELETE FROM jobs WHERE failed > 8"
 }
