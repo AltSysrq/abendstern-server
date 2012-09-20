@@ -123,6 +123,12 @@ proc wl str {
       puts $str
     }
     secure {
+      incr outputsSinceKeyChange
+      if {$outputsSinceKeyChange > 1024} {
+        set outputsSinceKeyChange 0
+        setKey outputKey [string trim [exec mpzrand]]
+      }
+
       set str [encoding convertto utf-8 $str]
       append str "\n"
       while {[string length $str] % $::BLOCK_SZ} {
@@ -130,12 +136,6 @@ proc wl str {
       }
       puts -nonewline [::aes::Encrypt $outputKey $str]
       flush stdout
-
-      incr outputsSinceKeyChange
-      if {$outputsSinceKeyChange > 1024} {
-        set outputsSinceKeyChange 0
-        setKey outputKey [string trim [exec mpzrand]]
-      }
     }
     default {
       error "Unexpected outputMode $outputMode"
