@@ -27,8 +27,8 @@ while {true} {
   ::abnet::openConnection
   vwait ::abnet::busy
   if {!$::abnet::isReady} {
-    loge "Unable to connect to server: $::abnet::resultMessage"
-    loge "Retrying in 30 minutes..."
+    elog "Unable to connect to server: $::abnet::resultMessage"
+    elog "Retrying in 30 minutes..."
     sleep [expr {30*60*1000}]
     continue
   }
@@ -46,9 +46,10 @@ while {true} {
   while {$::abnet::isConnected} {
     # Poll isConnected every 5 minutes
     sleep 300000
+    elog "Connection status: $::abnet::isConnected"
   }
 
-  puts stderr "Connection to the Abendstern Network lost!"
-  puts stderr "Reconnecting in 5 minutes..."
+  elog "Connection to the Abendstern Network lost!"
+  elog "Reconnecting in 5 minutes..."
   sleep 300000
 }
