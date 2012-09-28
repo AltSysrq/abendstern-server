@@ -632,6 +632,8 @@ ON ships.class = bestShipsMaxima.class
 AND ships.category = bestShipsMaxima.category
 AND ships.aiscore = bestShipsMaxima.aiscore
 AND ships.isPublic
+AND ships.acceleration > 1.0e-9
+AND ships.rotation > 1.0e-9
 GROUP BY ships.class, ships.category;
 
 -- Records each users "good" or "poor" rating of ships.
