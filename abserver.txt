@@ -591,6 +591,11 @@ CREATE TABLE ships (
   -- completed which tests this ship, mix the new value into this
   -- (eg, aiscore = 0.9*aiscore + 0.1*$newscore)
   aiscore       FLOAT           NOT NULL        DEFAULT -1,
+  -- The acceleration of the ship, in screens/ms/ms, at the greatest throttle
+  -- which is not energy negative.
+  acceleration  FLOAT           NOT NULL        DEFAULT 0,
+  -- The rotational acceleration of the ship, in radians/ms/ms
+  rotation      FLOAT           NOT NULL        DEFAULT 0,
 
   PRIMARY KEY (shipid),
   KEY fileid (fileid),

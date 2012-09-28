@@ -74,6 +74,17 @@ foreach {userid fileid shipid isPublic} $shipsToCheck {
 
   set category [shipCategoryToInt [$ship categorise]]
 
+  # Get acceleration and rotation
+  $ship setThrustOn yes
+  for {set throttle 0.0} {$throttle < 1.0} \
+      {set throttle [expr {$throttle+0.05}]} {
+    $ship setThrust $throttle
+    if {[$ship getPowerUsagePercent] > 1} break
+  }
+
+  set acceleration [$ship getAcceleration]
+  set rotation [$ship getRotationAccel]
+
   # Done with the ship itself
   delete object $ship
 
@@ -103,13 +114,16 @@ foreach {userid fileid shipid isPublic} $shipsToCheck {
       "UPDATE ships
        SET name = $name, class = '[$ str tmpship.info.class]',
            isPublic = $isPublic, posted = NOW(), rendered = 0,
-           category = $category
+           category = $category,
+           acceleration = $acceleration, rotation = $rotation
        WHERE shipid = $shipid"
   } else {
     ::mysql::exec $mcxn \
-      "INSERT INTO ships(fileid, owner, name, class, isPublic, posted, category)
+      "INSERT INTO ships(fileid, owner, name, class, isPublic, posted, category,
+                         acceleration, rotation)
        VALUES ($fileid, $userid, $name, '[$ str tmpship.info.class]',
-               $isPublic, NOW(), $category)"
+               $isPublic, NOW(), $category
+               $acceleration, $rotation)"
   }
 
   $ unmodify tmpship
