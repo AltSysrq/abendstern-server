@@ -126,7 +126,9 @@ proc wl str {
       incr outputsSinceKeyChange
       if {$outputsSinceKeyChange > 1024} {
         set outputsSinceKeyChange 0
-        setKey outputKey [string trim [exec mpzrand]]
+        set newKey [string trim [exec mpzrand]]
+        wl [list change-key $newKey]
+        setKey outputKey $newKey
       }
 
       set str [encoding convertto utf-8 $str]
