@@ -6,6 +6,7 @@ package require mysqltcl
 source credentials
 source geneticai.tcl
 source batchjobs.tcl
+source bestships.tcl
 
 set ::abnet::SERVER localhost
 set DATABASE abendstern
@@ -136,6 +137,9 @@ delete object $field
 
 # Update batch job listing
 update-batch-jobs
+
+# Update best ships
+update-best-ships
 
 # Update indices
 set ::abnet::busy yes

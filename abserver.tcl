@@ -1391,16 +1391,53 @@ proc message-admin-generate-user-pages {} {
       }
       puts $out "</div>"
 
-      log info "pages for $userid done"
     }
 
     puts $out "<!--#include virtual=\"/commonend.shtml\" -->"
     close $out
+
+    log info "pages for $userid done"
   }
 
   log info "done"
   wl [list action-status yes {general success} \
       "The operation completed successfully"]
+}
+
+# Atomically copies the given fileid to a file of the given name owned by the
+# current user, creating it (public) if it does not exist.
+# This does not return success or failure; it always succeeds.
+# It does not maintain the current disk usage, since only admins can call it
+# anyway.
+proc message-admin-atomic-copy {newname srcfileid} {
+  global userid FILES_DIR
+  assert_integer $srcfileid
+  TRANSACTION {
+    # Get the current owner, and lock that row
+    SELECTR {owner size} FROM files WHERE fileid = $srcfileid FOR UPDATE
+    # See if the current user has a file with that name
+    SELECTRA {COUNT(*) exists fileid existingFileid} FROM files \
+    WHERE owner = $userid \
+    AND name = [' $newname] FOR UPDATE
+
+    if {$exists} {
+      # Copy the old file on top of the new one
+      file copy -force -- $FILES_DIR/$owner/$srcfileid \
+          $FILES_DIR/$userid/$existingFileid
+      UPDATE files SET size = $size WHERE fileid = $existingFileid
+    } else {
+      # Create new file entry
+      INSERT INTO files (owner, name, size, isPublic) \
+      VALUES ($userid, [' $newname], $size, 1)
+
+      SELECTR fileid FROM files \
+      WHERE owner = $userid \
+      AND name = [' $newname]
+
+      file copy -force -- $FILES_DIR/$owner/$srcfileid \
+          $FILES_DIR/$userid/$fileid
+    }
+  }
 }
 
 proc job-done-render-ship {jobid fileid} {
