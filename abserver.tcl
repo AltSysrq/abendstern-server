@@ -825,6 +825,7 @@ proc message-top-file-lookup {userid filename} {
   set fileid {} ;# Return empty fileid if not found
   assert_integer $userid
   SELECTR fileid FROM files WHERE owner = $userid AND name = [' $filename]
+  log info "lookup $userid/$filename: {$fileid}"
   wl [list fileid $userid $filename $fileid]
 }
 
