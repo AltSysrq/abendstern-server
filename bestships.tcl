@@ -7,8 +7,8 @@ proc update-best-ships {} {
                            FROM ships
                            WHERE isPublic
                            AND name IS NOT NULL
-                           AND acceleration > 1.0e-9
-                           AND rotation > 1.0e-9
+                           AND acceleration > 5.0e-9
+                           AND rotation > 1.0e-8
                            GROUP BY class, category" -flatlist] \
   {
     # Use at most 5 ships or 1/5th of the ships available, whichever is smaller
