@@ -123,7 +123,7 @@ foreach {userid fileid shipid isPublic} $shipsToCheck {
       "INSERT INTO ships(fileid, owner, name, class, isPublic, posted, category,
                          acceleration, rotation)
        VALUES ($fileid, $userid, $name, '[$ str tmpship.info.class]',
-               $isPublic, NOW(), $category
+               $isPublic, NOW(), $category,
                $acceleration, $rotation)"
   }
 
