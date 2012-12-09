@@ -304,24 +304,12 @@ top-ai-report-2 species generation cortex instance score comptime
   score:        float, score of the quadruple
   comptime:     number of milliseconds since last report
 
-top-internet-info ipv laddr lport
-  Sent by the client. Prepares Internet connectivity with the given Internet
-  protocol (4 or 6), given what the client sees as its IP address and port
-  number.
+top-abuhops-auth
+  Sent by the client. Requests credentials for connecting to Abuhops.
 
-internet-ready iaddr iport vnum
-  Sent by the server in response to top-internet-info. Informs the client of its
-  Internet address and port in the protocol specified in top-internet-info, and
-  provides the validation number for the hole-punching service.
-
-  IPv4 connections support NAT with the following rules:
-    If two clients have the same Internet address, they connect to each other
-    via their reported local addresses.
-    If a client's "Internet" address is 192.168.*, that address is replaced by
-    the IP address of abendstern.servegame.com, and its port replaced by a hard-
-    wired table of port-forwarding values.
-    Other clients use each others' Internet addresses.
-  IPv6 connections assume the absense of NAT.
+abuhops-auth id name timestamp hmac
+  Sent by the server. Indicates the credentials the client can use to connect
+  to Abuhops.
 
 job type ...
   Sent by the server. Requests the client perform the job specified by

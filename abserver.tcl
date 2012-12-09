@@ -281,8 +281,29 @@ proc pwhash {user passwd} {
   sha2::sha256 $user$passwd
 }
 
+# The socket given us by inetd never expires. If the remote host falls off the
+# face of the earth, the program will never terminate.
+# Create an after script which runs every 15 minutes and exits if the read loop
+# has not iterated theresince.
+set timeoutFlag 1
+proc die-if-flag-not-set {} {
+  if {!$::timeoutFlag} {
+    log error "Connection timed out"
+    foreach script $exitHooks {
+      if {[catch {eval $script} err]} {
+        log error "Exit hook: $err"
+      }
+    }
+    exit
+  }
+
+  set ::timeoutFlag 0
+  after 900000 die-if-flag-not-set
+}
+
 proc main {} {
   global exitHooks isRunning logOutput userid lastLoginPing hasLoginExpired
+  die-if-flag-not-set
   log info "Greetings"
   if {[catch {
     while {$isRunning} {
@@ -306,6 +327,8 @@ proc main {} {
       if {$isRunning} {
         execmsg {*}$line
       }
+
+      set ::timeoutFlag 1
     }
   } err erropts]} {
     log error "Unspecified: $err"
@@ -1172,6 +1195,22 @@ proc message-top-ai-report-2 {species generation cortex
   (submitter, species, generation, cortex, instance, score, comptime) \
   VALUES \
   ($::userid, $species, $generation, $cortex, $instance, $score, $comptime)
+}
+
+proc message-top-abuhops-auth {} {
+  log info "Requesting authentication for abuhops."
+  if {[catch {
+    set f [open /usr/local/etc/abuhops/shared_secret rb]
+    set secret [read $f]
+    close $f
+    set timestamp [clock seconds]
+    set hmac [::sha2::hmac -hex -key $secret \
+                  [binary format iia* $::userid $timestamp \
+                       [encoding convertto utf-8 $::username]]]
+    wl [list abuhops-auth  $::userid $::username $timestamp $hmac]
+  } err]} {
+    log error $err
+  }
 }
 
 proc message-job-done {args} {
